@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Postgres Index Types</title>
+
+    <meta name="description" content="Postgres Index Types">
+    <meta name="author" content="Dominik Janisch">
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <link rel="stylesheet" href="./lib/reveal.js/css/reveal.css" />
+    <link rel="stylesheet" href="./lib/reveal.js/css/theme/moon.css" id="theme" />
+    <link href="https://fonts.googleapis.com/css?family=Inconsolata|Lato|Merriweather" rel="stylesheet" />
+    <!--<link rel="stylesheet" href="./customized.css">-->
+
+    <!-- Theme used for syntax highlighting of code -->
+    <link rel="stylesheet" href="./lib/reveal.js/lib/css/zenburn.css" />
+    <!-- Printing and PDF exports -->
+    <script>
+(function() {
+  var printCssDir = './lib/reveal.js/css/print';
+  var link = document.createElement( 'link' );
+  link.rel = 'stylesheet';
+  link.type = 'text/css';
+  link.href = window.location.search.match( /print-pdf/gi ) ?
+    printCssDir + '/pdf.css' :
+    printCssDir + '/paper.css';
+  document.getElementsByTagName( 'head' )[0].appendChild( link );
+}());
+    </script>
+    <!--[if lt IE 9]>
+    <script src="./lib/reveal.js/lib/js/html5shiv.js"></script>
+    <![endif]-->
+    <script>
+function preloadLargeGif() {
+  (new Image()).src = 'img/examples-screenies/all-examples.gif';
+}
+    </script>
+  </head>
+  <body onload="preloadLargeGif();">
+    <div class="reveal">
+
+      <div class="slides">
+
+        <section id="start">
+          <h1>Postgres Index Types</h1>
+          <p>
+            <a class="github" href="https://github.com/djanisch">Dominik Janisch</a> | XMPP: jad@jabber.at
+          </p>
+        </section>
+
+        <section id="outline">
+          <h2>Postgres 10 index types</h2>
+          <ul>
+            <li>B-tree</li>
+            <li>Hash</li>
+            <li>GiST</li>
+            <li>SP-GiST</li>
+            <li>GIN</li>
+            <li>BRIN</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Default Index</h2>
+          <p>The CREATE INDEX command creates B-tree indexes by default</p>
+        </section>
+
+        <section>
+          <h2>B-tree</h2>
+          <p>self-balancing tree data structure</p>
+          <blockquote>
+            <img src="img/B-tree.svg" class="plain" alt="B-tree of order 5" width="400" />
+            <footer><cite><a href="https://en.wikipedia.org/wiki/File:B-tree.svg">https://en.wikipedia.org/wiki/File:B-tree.svg</a></cite></footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <h2>B-tree</h2>
+          <p>used for</p>
+          <ul>
+            <li>comparison (<, <=, =, =>, >)</li>
+            <li>BETWEEN</li>
+            <li>IN</li>
+            <li>IS NULL, IS NOT NULL condition</li>
+            <li>LIKE 'foo%'</li>
+            <li>ILIKE and ~*, but only if the pattern starts with non-alphabetic characters</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>Creation of a b-tree index</p>
+          <pre><code data-trim>
+            CREATE INDEX name ON table USING BTREE (column);
+          </code></pre>
+          <p>Usage examples</p>
+          <pre><code data-trim>
+            SELECT * FROM table WHERE column = 'my value';
+            SELECT * FROM table WHERE column < 'my value';
+            SELECT * FROM table WHERE column BETWEEN 'my value1' AND 'my value2';
+            SELECT * FROM table WHERE column IS NOT NULL;
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>Hash</h2>
+          <p>used for</p>
+          <ul>
+            <li>simple comparison (=)</li>
+          </ul>
+          <p>Durable since Postgres 10</p>
+          <p><a href="http://amitkapila16.blogspot.com/2017/03/hash-indexes-are-faster-than-btree.html">Can be faster than B-Tree</a></p>
+        </section>
+
+        <section>
+          <p>Creation of a hash index</p>
+          <pre><code data-trim>
+            CREATE INDEX name ON table USING HASH (column);
+          </code></pre>
+          <p>Usage examples</p>
+          <pre><code data-trim>
+          SELECT * FROM table WHERE column = 'my value';
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>GiST</h2>
+          <blockquote>
+            GiST stands for Generalized Search Tree. It is a balanced, tree-structured access method, that acts as a base template in which to implement arbitrary indexing schemes. B-trees, R-trees and many other indexing schemes can be implemented in GiST.
+            <footer><cite><a href="https://www.postgresql.org/docs/devel/static/gist-intro.html">Postgres Docs</a></cite></footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <h2>GiST</h2>
+          <p>used for</p>
+          <ul>
+            <li>Spatial Indexes (Postgis)</li>
+            <li>Fulltext search</li>
+            <li>Determining the similarity of alphanumeric text with the pg_trgm extension</li>
+            <li>Postgres Range Types (e.g. int4range)</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>Creation of a GiST index</p>
+          <pre><code data-trim>
+            CREATE INDEX name ON table USING GIST (the_geom);
+            CREATE INDEX name ON table USING GIST 
+            (to_tsvector('english', column));
+            CREATE INDEX name ON table USING GIST (column gist_trgm_ops);
+          </code></pre>
+          <p>Usage examples</p>
+          <pre><code data-trim>
+          SELECT * FROM table, table2 WHERE 
+          ST_Within(table.the_geom, table2.the_geom);
+
+          SELECT * FROM table WHERE 
+          to_tsvector('english', column) @@ to_tsquery('my term');
+
+          SELECT column, similarity(column, 'my term') FROM table 
+          WHERE column % 'my term';
+          </code></pre>
+        </section>
+
+        <section>
+          <h3>Range type example</h3>
+          <p>Sample table</p>
+          <pre><code data-trim>
+            CREATE TABLE ranges AS SELECT 
+            int4range(x, x + (random()*50)::int + 5) AS range FROM 
+            generate_series(1,150000) x;
+          </code></pre>
+          <p>Creation of the GiST index</p>
+          <pre><code data-trim>
+            CREATE INDEX range_gist ON ranges USING gist (range);
+          </code></pre>
+          <p>Usage example</p>
+          <pre><code data-trim>
+          SELECT range FROM ranges WHERE range @> 3216;
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>SP-GiST</h2>
+          <blockquote>
+            SP-GiST is an abbreviation for space-partitioned GiST. SP-GiST supports partitioned search trees, which facilitate development of a wide range of different non-balanced data structures, such as quad-trees, k-d trees, and radix trees (tries).
+            <footer><cite><a href="https://www.postgresql.org/docs/devel/static/spgist-intro.html">Postgres Docs</a></cite></footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <h2>SP-GiST</h2>
+          <ul>
+            <li>Index creation can be faster than the creation of a GiST index</li>
+            <li>Query time can be faster than GiST</li>
+            <li>Postgres Range Types (e.g. int4range)</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>Sample table</p>
+          <pre><code data-trim>
+            CREATE TABLE ranges AS SELECT 
+            int4range(x, x + (random()*50)::int + 5) AS range FROM 
+            generate_series(1,150000) x;
+          </code></pre>
+          <p>Creation of a SP-GiST index</p>
+          <pre><code data-trim>
+            CREATE INDEX range_spgist ON ranges USING spgist (range);
+          </code></pre>
+          <p>Usage example</p>
+          <pre><code data-trim>
+          SELECT range FROM ranges WHERE range @> 3216;
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>GIN</h2>
+          <p>Generalized Inverted Index</p>
+        </section>
+
+        <section>
+          <h2>GIN</h2>
+          <blockquote>
+            GIN is designed for handling cases where the items to be indexed are composite values, and the queries to be handled by the index need to search for element values that appear within the composite items. For example, the items could be documents, and the queries could be searches for documents containing specific words.
+            <footer><cite><a href="https://www.postgresql.org/docs/current/static/gin-intro.html">Postgres Docs</a></cite></footer>
+          </blockquote>
+        </section>
+
+        <section>
+          <h2>GIN</h2>
+          <p>used for</p>
+          <ul>
+            <li>JSONB</li>
+            <li>Fulltext search</li>
+            <li>Determining the similarity of alphanumeric text with the pg_trgm extension</li>
+          </ul>
+        </section>
+
+        <section>
+          <p>Creation of a GIN index</p>
+          <pre><code data-trim>
+            CREATE INDEX name ON table USING GIN (jsonb_doc);
+            CREATE INDEX name ON table USING GIN 
+            (to_tsvector('english', column));
+            CREATE INDEX name ON table USING GIN (column gin_trgm_ops);
+          </code></pre>
+          <p>Usage examples</p>
+          <pre><code data-trim>
+          SELECT * FROM table WHERE jsonb_doc @> '{"term": "my term"}';
+
+          SELECT * FROM table WHERE 
+          to_tsvector('english', column) @@ to_tsquery('my term');
+
+          SELECT column, similarity(column, 'my term') FROM table 
+          WHERE column % 'my term';
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>BRIN</h2>
+          <p>Block Range INdexes</p>
+        </section>
+
+        <section>
+          <h2>BRIN</h2>
+          <ul>
+            <li>Stores the minimum and maximum value per block</li>
+            <li>Very small indexes</li>
+            <li>Good for naturally ordered tables
+              <ul>
+                <li>Bad performance if the data is not sorted</li>
+              </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <p>Creation of a BRIN index</p>
+          <pre><code data-trim>
+            CREATE INDEX name ON table USING brin (column);
+          </code></pre>
+          <p>Usage examples</p>
+          <pre><code data-trim>
+          SELECT * FROM table WHERE column BETWEEN value1 AND value2;
+          </code></pre>
+        </section>
+
+        <section>
+          <h2>For more information</h2>
+          <ul>
+            <li><a href="https://www.postgresql.org/docs/current/static/indexes-types.html">Postgres Documentation</a></li>
+            <li><a href="https://en.wikibooks.org/wiki/PostgreSQL/Index_Types">Postgres Index Types</a></li>
+            <li><a href="https://www.pgcon.org/2011/schedule/attachments/197_pgcon-2011.pdf">SP-GiST – a new indexing framework for PostgreSQL</a></li>
+            <li><a href="http://www.cybertec.at/brin-indexes-correlation-correlation-correlation/">BRIN indexes: Correlation, correlation, correlation</a></li>
+            <li><a href="https://de.slideshare.net/jkatz05/explain-the-index-of-postgresql-indexes">Indexing Complex PostgreSQL Data Types</a></li>
+          </ul>
+        </section>
+
+      </div>
+    </div>
+    <!--https://www.enterprisedb.com/blog/new-features-coming-postgresql-10-->
+    <script src="./lib/reveal.js/lib/js/head.min.js"></script>
+    <script src="./lib/reveal.js/js/reveal.js"></script>
+    <script>
+(function() {
+  var revealDir = './lib/reveal.js';
+  var pluginDir = revealDir + '/plugin';
+  // More info https://github.com/hakimel/reveal.js#configuration
+  Reveal.initialize({
+    controls: true,
+    progress: true,
+    history: true,
+    center: true,
+    transition: 'none',
+
+    // More info https://github.com/hakimel/reveal.js#dependencies
+    dependencies: [
+      {
+        src: revealDir + '/lib/js/classList.js',
+        condition: function() {
+          return !document.body.classList;
+        }
+      },
+      {
+        src: pluginDir + '/markdown/marked.js',
+        condition: function() {
+          return !!document.querySelector( '[data-markdown]' );
+        }
+      },
+      {
+        src: pluginDir + '/markdown/markdown.js',
+        condition: function() {
+          return !!document.querySelector( '[data-markdown]' );
+        }
+      },
+      {
+        src: pluginDir + '/zoom-js/zoom.js',
+        async: true
+      },
+      {
+        src: pluginDir + '/highlight/highlight.js',
+        async: true,
+        callback: function() {
+          hljs.initHighlightingOnLoad();
+        }
+      },
+      {
+        src: pluginDir + '/notes/notes.js',
+        async: true
+      }
+    ]
+  });
+}());
+    </script>
+  </body>
+</html>
